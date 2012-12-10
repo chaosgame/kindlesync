@@ -6,6 +6,7 @@ import re
 import json
 import bottlenose
 from lxml import etree
+import gzip
 
 from config import config
 
@@ -75,37 +76,31 @@ class WebReader(mechanize.Browser):
                     }))
 
         userdata = json.load(resp)
-        metadata_url = userdata['metadataUrl']
+        fragments_url = userdata.get('fragmentsMapUrl', None)
+        last_page_read = userdata.get('lastPageReadData', None)
 
-        if 'metadataUrl' not in userdata or \
-           'lastPageReadData' not in userdata:
+        if not fragments_url or not last_page_read:
             return {}
-
-        last_page_read = userdata['lastPageReadData']
 
         if 'position' not in last_page_read or \
            'syncTime' not in last_page_read:
             return {}
 
         return {
-            'metadata_url' : userdata['metadataUrl'],
+            'fragments_url' : userdata['fragmentMapUrl'],
             'pos' : int(last_page_read['position']),
             'sync_time' : last_page_read['syncTime'],
             }
 
-    def get_book_metadata(self, asin, metadata_url):
-        resp = self.open(metadata_url)
-        match = re.search('{.*}', resp.read())
-        metadata = json.loads(match.group(0))
+    def get_book_length(self, asin, fragments_url):
+        resp = self.open(fragments_url)
 
-        if 'startPosition' not in metadata or \
-           'endPosition' not in metadata:
-               return {}
+        gz = gzip.GzipFile(fileobj=resp, mode='rb')
+        match = re.search('{.*}', gz.read())
+        gz.close()
+        fragments = json.loads(match.group(0))
 
-        return {
-                'start' : int(metadata['startPosition']),
-                'end' : int(metadata['endPosition']),
-                }
+        return fragments['fragmentArray'][-1]['cPos']
 
 class Amazon(bottlenose.Amazon):
     def __init__(self):
@@ -122,12 +117,9 @@ class Amazon(bottlenose.Amazon):
 
         isbn = attributes.findtext(
                 './/{%s}EISBN' % namespace)
-        num_pages = int(attributes.findtext(
-                './/{%s}NumberOfPages' % namespace))
 
         return {
             'isbn' : isbn,
-            'num_pages' : num_pages,
             }
 
 if __name__ == '__main__':
@@ -147,9 +139,9 @@ if __name__ == '__main__':
                 amazon.get_book_attributes(asin))
         book.update(
                 webreader.get_book_userdata(asin))
-        if 'metadata_url' in book:
-            book.update(
-                    webreader.get_book_metadata(asin, book['metadata_url']))
+        if 'fragments_url' in book:
+            book['length'] = \
+                    webreader.get_book_length(asin, book['fragments_url'])
         books[asin] = book
 
     from pprint import pprint

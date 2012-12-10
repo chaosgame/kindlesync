@@ -1,7 +1,6 @@
 from flask import Flask, redirect, url_for, request, session
 import oauth2
 from urllib import urlencode
-from pprint import pprint
 
 from config import config
 from goodreads import GoodReads
@@ -21,25 +20,31 @@ def sync(token):
 
     owned_content = webreader.get_owned_content()
     for asin, content in owned_content.iteritems():
-        book = dict(title=content['title'])
+        book = {
+                'title' : content['title'],
+                'asin' : asin,
+                }
         book.update(
                 webreader.get_book_userdata(asin))
-        if 'metadata_url' not in book:
+        if 'fragments_url' not in book:
+            print 'fragments_url doesn\'t exit for "%s"' % book['title']
             continue
         book.update(
                 amazon.get_book_attributes(asin))
-        book.update(
-                webreader.get_book_metadata(asin, book['metadata_url']))
-        book['grid'] = GoodReads.isbn_to_id(book['isbn'])
+        book['length'] = \
+                webreader.get_book_length(asin, book['fragments_url'])
 
-        if 'pos' not in book or 'start' not in book or 'end' not in book:
+        if 'isbn' not in book:
+            print 'isbn doesn\'t exit for "%s"' % book['title']
             continue
 
-        book['percent'] = \
-            100. * (book['pos'] - book['start']) / (book['end'] - book['start'])
-        book['page'] = int(book['percent'] * book['num_pages'])
+        book['grid'] = GoodReads.isbn_to_id(book['isbn'])
 
-        pprint(book)
+        if 'pos' not in book or 'length' not in book:
+            print 'location data doesn\'t exit for "%s"' % book['title']
+            continue
+
+        book['percent'] = 100. * book['pos'] / book['length']
 
         if book['percent'] >= 100:
             goodreads.update_as_done(token, book)
@@ -48,8 +53,6 @@ def sync(token):
 
 @app.route('/login/authorized')
 def goodreads_authorized():
-    print request.args['oauth_token']
-
     sync(session['oauth_token'])
 
     return "Ok"
