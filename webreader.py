@@ -76,7 +76,7 @@ class WebReader(mechanize.Browser):
                     }))
 
         userdata = json.load(resp)
-        fragments_url = userdata.get('fragmentsMapUrl', None)
+        fragments_url = userdata.get('fragmentMapUrl', None)
         last_page_read = userdata.get('lastPageReadData', None)
 
         if not fragments_url or not last_page_read:
