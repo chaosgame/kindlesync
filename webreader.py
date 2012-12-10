@@ -1,5 +1,4 @@
-import urllib
-from ConfigParser import ConfigParser
+from urllib import urlencode
 import urllib2
 import mechanize
 import cookielib
@@ -8,7 +7,7 @@ import json
 import bottlenose
 from lxml import etree
 
-config = ConfigParser()
+from config import config
 
 class WebReader(mechanize.Browser):
     CHROME_USERAGENT = \
@@ -32,7 +31,7 @@ class WebReader(mechanize.Browser):
 
     def signin(self):
         url = '%s?%s' % ('https://www.amazon.com/ap/signin',
-                urllib.urlencode(WebReader.OPENID_REFER))
+                urlencode(WebReader.OPENID_REFER))
         resp = self.open(url)
 
         resp.set_data(re.sub('<!DOCTYPE(.*)>', '', resp.get_data()))
@@ -49,7 +48,12 @@ class WebReader(mechanize.Browser):
 
         # Device Type is a magic string
         self.addheaders.append(('x-amzn-sessionid', cookies['session-id']))
-        resp = self.open('https://read.amazon.com/service/web/register/getDeviceToken?serialNumber=A2CTZ977SKFQZY&deviceType=A2CTZ977SKFQZY')
+        resp = self.open(
+                'https://read.amazon.com/service/web/register/getDeviceToken?%s' %
+                urlencode({
+                    'serialNumber' : 'A2CTZ977SKFQZY',
+                    'deviceType' : 'A2CTZ977SKFQZY'
+                    }))
 
         device_token = json.load(resp)
 
@@ -62,7 +66,13 @@ class WebReader(mechanize.Browser):
         return json.load(resp)['asinsToAdd']
 
     def get_book_userdata(self, asin):
-        resp = self.open('https://read.amazon.com/service/web/reader/startReading?asin=%s&isSample=false&clientVersion=10403026' % asin)
+        resp = self.open(
+                'https://read.amazon.com/service/web/reader/startReading?%s' %
+                urlencode({
+                    'asin' : asin,
+                    'isSample' : 'false',
+                    'clientVersion' : '10403026'
+                    }))
 
         userdata = json.load(resp)
         metadata_url = userdata['metadataUrl']
@@ -71,9 +81,16 @@ class WebReader(mechanize.Browser):
            'lastPageReadData' not in userdata:
             return {}
 
+        last_page_read = userdata['lastPageReadData']
+
+        if 'position' not in last_page_read or \
+           'syncTime' not in last_page_read:
+            return {}
+
         return {
             'metadata_url' : userdata['metadataUrl'],
-            'last_page_read' : userdata['lastPageReadData']
+            'pos' : int(last_page_read['position']),
+            'sync_time' : last_page_read['syncTime'],
             }
 
     def get_book_metadata(self, asin, metadata_url):
@@ -86,8 +103,8 @@ class WebReader(mechanize.Browser):
                return {}
 
         return {
-                'start' : metadata['startPosition'],
-                'end' : metadata['endPosition'],
+                'start' : int(metadata['startPosition']),
+                'end' : int(metadata['endPosition']),
                 }
 
 class Amazon(bottlenose.Amazon):
