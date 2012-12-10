@@ -1,6 +1,7 @@
 .*
 *.pyc
-*.ini
+*.db
+auth.ini
 bin
 lib
 include

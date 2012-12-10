@@ -7,6 +7,7 @@ import json
 import bottlenose
 from lxml import etree
 import gzip
+import datetime
 
 from config import config
 
@@ -89,7 +90,7 @@ class WebReader(mechanize.Browser):
         return {
             'fragments_url' : userdata['fragmentMapUrl'],
             'pos' : int(last_page_read['position']),
-            'sync_time' : last_page_read['syncTime'],
+            'sync_time' : datetime.utcfromtimestamp(last_page_read['syncTime']),
             }
 
     def get_book_length(self, asin, fragments_url):
