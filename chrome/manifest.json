@@ -1,0 +1,13 @@
+{
+  "name": "Kindle Sync",
+  "version": "1.0",
+  "manifest_version": 2,
+
+  "description": "Synchronize your kindle reading progress with Goodreads",
+
+  "permissions": ["alarms", "cookies", "http://*.amazon.com/*", "https://*.amazon.com/*", "https://*.cloudfront.net/*", "http://ecs.amazonaws.com/onca/xml"],
+  "background": {
+    "scripts": ["kindlesync.js","jquery-1.8.3.min.js","underscore-min.js","sha2.js"],
+    "persistent": false
+  }
+}

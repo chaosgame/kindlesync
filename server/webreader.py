@@ -7,7 +7,7 @@ import json
 import bottlenose
 from lxml import etree
 import gzip
-import datetime
+from datetime import datetime
 
 from config import config
 
@@ -87,10 +87,15 @@ class WebReader(mechanize.Browser):
            'syncTime' not in last_page_read:
             return {}
 
+        sync_time = last_page_read['syncTime']
+
+        if sync_time == None:
+            sync_time = 0
+
         return {
             'fragments_url' : userdata['fragmentMapUrl'],
             'pos' : int(last_page_read['position']),
-            'sync_time' : datetime.utcfromtimestamp(last_page_read['syncTime']),
+            'sync_time' : datetime.utcfromtimestamp(sync_time / 1000),
             }
 
     def get_book_length(self, asin, fragments_url):

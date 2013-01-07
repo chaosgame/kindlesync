@@ -2,8 +2,8 @@ import oauth2
 from flask import Flask, redirect, url_for, request, session
 from flask.ext.sqlalchemy import SQLAlchemy
 from sqlalchemy.orm.exc import NoResultFound
-from urllib import urlencode
 from datetime import datetime
+from urllib import urlencode
 from pprint import pprint
 
 from config import config
@@ -14,6 +14,16 @@ app = Flask(__name__)
 app.secret_key = 'kindlesync'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///kindlesync.db'
 db = SQLAlchemy(app)
+
+facebook = oauth.remote_app('facebook',
+    base_url='https://graph.facebook.com/',
+    request_token_url=None,
+    access_token_url='/oauth/access_token',
+    authorize_url='https://www.facebook.com/dialog/oauth',
+    consumer_key=FACEBOOK_APP_ID,
+    consumer_secret=FACEBOOK_APP_SECRET,
+    request_token_params={'scope': 'email'}
+)
 
 class StaticBookData(db.Model):
     __tablename__ = 'book'
@@ -63,10 +73,10 @@ class User(db.Model):
     sync_time = db.Column(db.DateTime, nullable=False)
 
     def __init__(self, access_token):
-        azsession_id = ''
-        graccess_token = access_token['oauth_token']
-        graccess_token_secret = access_token['oauth_token_secret']
-        sync_time = datetime.utcfromtimestamp(0)
+        self.azsession_id = ''
+        self.graccess_token = access_token['oauth_token']
+        self.graccess_token_secret = access_token['oauth_token_secret']
+        self.sync_time = datetime.utcfromtimestamp(0)
 
 class KindleSync(object):
     def __init__(self):
@@ -81,21 +91,22 @@ class KindleSync(object):
         self.token = token
 
     def load_static_book_data(self, book):
-        if 'fragments_url' not in book:
+        if book.get('fragments_url') == None:
             print 'fragments_url doesn\'t exit for "%s"' % book['title']
             return -1
+
         book.update(
                 self.amazon.get_book_attributes(book['asin']))
         book['length'] = \
                 self.webreader.get_book_length(book['asin'], book['fragments_url'])
 
-        if 'isbn' not in book:
+        if book.get('isbn') == None:
             print 'isbn doesn\'t exit for "%s"' % book['title']
             return -1
 
         book['grid'] = GoodReads.isbn_to_id(book['isbn'])
 
-        if 'pos' not in book or 'length' not in book:
+        if book.get('pos') == None or book.get('length') == None:
             print 'location data doesn\'t exit for "%s"' % book['title']
             return -1
 
@@ -105,6 +116,9 @@ class KindleSync(object):
 
     def sync(self):
         user = User.query.filter_by(graccess_token=self.token).one()
+
+        # TODO(nathan) need to tie the user to the username or id
+        print self.goodreads.user_id(session['oauth_token'])
 
         owned_content = self.webreader.get_owned_content()
         for asin, content in owned_content.iteritems():
@@ -131,15 +145,19 @@ class KindleSync(object):
                     BookProgressData(user, static_book, book['sync_time']))
 
             if book['percent'] >= 100:
-                self.goodreads.update_as_done(self.token, book)
+                self.goodreads.update_as_done(session['oauth_token'], book)
             else:
-                self.goodreads.update_as_reading(self.token, book)
+                self.goodreads.update_as_reading(session['oauth_token'], book)
+
+        user.sync_time = datetime.utcnow()
         db.session.commit()
 
 @app.route('/goodreads/authorized')
 def goodreads_authorized():
+    print request
+    print request.args
     kindlesync = KindleSync()
-    kindlesync.init(session['oauth_token'])
+    kindlesync.init(request.args['oauth_token'])
 
     kindlesync.sync()
     return "Ok"
@@ -147,7 +165,9 @@ def goodreads_authorized():
 @app.route('/goodreads/login')
 def goodreads_login():
     access_token = GoodReads().get_access_token()
-    db.session.add(User(access_token))
+    # TODO(nathan) user should have more than just access token
+    user = User(access_token)
+    db.session.add(user)
     db.session.commit()
     return redirect('http://www.goodreads.com/oauth/authorize?%s' % 
         urlencode({
