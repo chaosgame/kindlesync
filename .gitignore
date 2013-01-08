@@ -1,7 +1,7 @@
 .*
 *.pyc
 *.db
-auth.ini
+auth.cfg
 bin
 lib
 include

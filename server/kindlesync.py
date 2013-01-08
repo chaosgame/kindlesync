@@ -4,183 +4,121 @@ from flask.ext.sqlalchemy import SQLAlchemy
 from sqlalchemy.orm.exc import NoResultFound
 from datetime import datetime
 from urllib import urlencode
-from pprint import pprint
+from urlparse import parse_qsl
+from ConfigParser import ConfigParser
 
-from config import config
-from goodreads import GoodReads
-from webreader import WebReader, Amazon
+import requests
+from lxml import etree
+from bottlenose import Amazon
+
+OAUTH2_HEADERS = {'content-type': 'application/x-www-form-urlencoded'}
 
 app = Flask(__name__)
 app.secret_key = 'kindlesync'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///kindlesync.db'
-db = SQLAlchemy(app)
+app.config.from_pyfile('auth.cfg')
+# db = SQLAlchemy(app)
 
-facebook = oauth.remote_app('facebook',
-    base_url='https://graph.facebook.com/',
-    request_token_url=None,
-    access_token_url='/oauth/access_token',
-    authorize_url='https://www.facebook.com/dialog/oauth',
-    consumer_key=FACEBOOK_APP_ID,
-    consumer_secret=FACEBOOK_APP_SECRET,
-    request_token_params={'scope': 'email'}
-)
+def asin_to_grid(asin):
+    # TODO(nathan) memoize this
+    amazon = Amazon(
+        app.config['AMAZON_KEY'],
+        app.config['AMAZON_SECRET'],
+        app.config['AMAZON_ASSOCTAG'])
 
-class StaticBookData(db.Model):
-    __tablename__ = 'book'
+    attributes = etree.fromstring(
+        amazon.ItemLookup(
+            ItemId=asin,
+            ResponseGroup='ItemAttributes'))
+    namespace = attributes.nsmap[None]
+    isbn = attributes.findtext(
+            './/{%s}EISBN' % namespace)
 
-    book_id = db.Column(db.Integer, primary_key=True)
-    asin = db.Column(db.String, index=True, unique=True, nullable=False)
-    grid = db.Column(db.String, nullable=False)
-    isbn = db.Column(db.String, nullable=False)
-    length = db.Column(db.Integer, nullable=False)
-    title = db.Column(db.String, nullable=False)
+    resp = requests.get(
+        'http://www.goodreads.com/book/isbn_to_id',
+        params={
+            'key' : app.config['GOODREADS_KEY'],
+            'isbn' : isbn,
+            })
 
-    def __init__(self, args):
-         self.asin = args['asin']
-         self.grid = args['grid']
-         self.isbn = args['isbn']
-         self.length = args['length']
-         self.title = args['title']
+    return resp.text
 
-    def update(self, book_struct):
-        book_struct['asin'] = self.asin
-        book_struct['grid'] = self.grid
-        book_struct['isbn'] = self.isbn
-        book_struct['length'] = self.length
-        book_struct['title'] = self.title
+@app.route('/update/<asin>/done')
+def update_done(asin):
+    client = oauth2.Client(
+        oauth2.Consumer(
+            key=app.config['GOODREADS_KEY'],
+            secret=app.config['GOODREADS_SECRET']),
+        session['access_token'])
 
-class BookProgressData(db.Model):
-    __tablename__ = 'book_progress'
+    body = urlencode({
+            'name' : 'read',
+            'book_id' : asin_to_grid(asin),
+            })
+    response, content = client.request(
+            'http://www.goodreads.com/shelf/add_to_shelf.xml',
+            'POST', body, OAUTH2_HEADERS)
 
-    progress_id = db.Column(db.Integer, primary_key=True)
-    user = db.Column(db.Integer, db.ForeignKey('user.user_id'))
-    book = db.Column(db.Integer, db.ForeignKey('book.book_id'), nullable=False)
-    sync_time = db.Column(db.DateTime, nullable=False)
+    return content
 
-    def __init__(self, user, static_book, sync_time):
-        self.user = user
-        self.static_book = static_book
-        self.sync_time = sync_time
+@app.route('/update/<asin>/progress/<float:percent>')
+def update_progress(asin, percent):
+    client = oauth2.Client(
+        oauth2.Consumer(
+            key=app.config['GOODREADS_KEY'],
+            secret=app.config['GOODREADS_SECRET']),
+        session['access_token'])
 
-class User(db.Model):
-    __tablename__ = 'user'
+    body = urlencode({
+            'name' : 'currently-reading',
+            'book_id' : asin_to_grid(asin),
+            })
+    response, content = client.request(
+            'http://www.goodreads.com/shelf/add_to_shelf.xml',
+            'POST', body, OAUTH2_HEADERS)
 
-    user_id = db.Column(db.Integer, primary_key=True)
-    azsession_id = db.Column(db.String)
-    graccess_token = db.Column(
-            db.String, index=True, unique=True, nullable=False)
-    graccess_token_secret = db.Column(db.String, nullable=False)
-    sync_time = db.Column(db.DateTime, nullable=False)
+    body = urlencode({
+                'user_status[book_id]' : asin_to_grid(asin),
+                'user_status[percent]' : percent,
+                })
+    response, content = client.request(
+            'http://www.goodreads.com/user_status.xml',
+            'POST', body, OAUTH2_HEADERS)
 
-    def __init__(self, access_token):
-        self.azsession_id = ''
-        self.graccess_token = access_token['oauth_token']
-        self.graccess_token_secret = access_token['oauth_token_secret']
-        self.sync_time = datetime.utcfromtimestamp(0)
+    return content
 
-class KindleSync(object):
-    def __init__(self):
-        self.amazon = Amazon()
-        self.webreader = WebReader()
-        self.goodreads = GoodReads()
-
-    def init(self, token):
-        self.webreader.init()
-        self.webreader.signin()
-        self.webreader.get_device_token()
-        self.token = token
-
-    def load_static_book_data(self, book):
-        if book.get('fragments_url') == None:
-            print 'fragments_url doesn\'t exit for "%s"' % book['title']
-            return -1
-
-        book.update(
-                self.amazon.get_book_attributes(book['asin']))
-        book['length'] = \
-                self.webreader.get_book_length(book['asin'], book['fragments_url'])
-
-        if book.get('isbn') == None:
-            print 'isbn doesn\'t exit for "%s"' % book['title']
-            return -1
-
-        book['grid'] = GoodReads.isbn_to_id(book['isbn'])
-
-        if book.get('pos') == None or book.get('length') == None:
-            print 'location data doesn\'t exit for "%s"' % book['title']
-            return -1
-
-        book['percent'] = 100. * book['pos'] / book['length']
-
-        return 0
-
-    def sync(self):
-        user = User.query.filter_by(graccess_token=self.token).one()
-
-        # TODO(nathan) need to tie the user to the username or id
-        print self.goodreads.user_id(session['oauth_token'])
-
-        owned_content = self.webreader.get_owned_content()
-        for asin, content in owned_content.iteritems():
-            book = {
-                    'title' : content['title'],
-                    'asin' : asin,
-                    }
-            book.update(
-                    self.webreader.get_book_userdata(asin))
-
-            try:
-                static_book = StaticBookData.query.filter_by(asin=asin).one()
-                static_book.update(book)
-            except NoResultFound:
-                if self.load_static_book_data(book) < 0:
-                    continue
-                static_book = StaticBookData(book)
-                db.session.add(static_book)
-
-            if book['sync_time'] < user.sync_time:
-                continue
-
-            db.session.add(
-                    BookProgressData(user, static_book, book['sync_time']))
-
-            if book['percent'] >= 100:
-                self.goodreads.update_as_done(session['oauth_token'], book)
-            else:
-                self.goodreads.update_as_reading(session['oauth_token'], book)
-
-        user.sync_time = datetime.utcnow()
-        db.session.commit()
-
-@app.route('/goodreads/authorized')
-def goodreads_authorized():
-    print request
-    print request.args
-    kindlesync = KindleSync()
-    kindlesync.init(request.args['oauth_token'])
-
-    kindlesync.sync()
+@app.route('/authorized')
+def authorized():
     return "Ok"
 
-@app.route('/goodreads/login')
-def goodreads_login():
-    access_token = GoodReads().get_access_token()
-    # TODO(nathan) user should have more than just access token
-    user = User(access_token)
-    db.session.add(user)
-    db.session.commit()
-    return redirect('http://www.goodreads.com/oauth/authorize?%s' % 
+@app.route('/login')
+def login():
+    client = oauth2.Client(
+        oauth2.Consumer(
+            key=app.config['GOODREADS_KEY'],
+            secret=app.config['GOODREADS_SECRET']))
+
+    response, content = \
+        client.request('http://www.goodreads.com/oauth/request_token', 'GET')
+
+    if response['status'] != '200':
+        abort(response['status'])
+
+    access_token = dict(parse_qsl(content))
+
+    session['access_token'] = oauth2.Token(
+            access_token['oauth_token'],
+            access_token['oauth_token_secret'])
+
+    return redirect('http://www.goodreads.com/oauth/authorize?' +
         urlencode({
-            'oauth_callback' : url_for('goodreads_authorized',_external=True),
+            'oauth_callback' : url_for('authorized', _external=True),
             'oauth_token' : access_token['oauth_token']
         }))
 
 @app.route('/')
 def index():
-    return redirect(url_for('goodreads_login'))
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
-    config.read('auth.ini')
-    db.create_all()
     app.run(debug=True)
 
