@@ -5,9 +5,15 @@
 
   "description": "Synchronize your kindle reading progress with Goodreads",
 
-  "permissions": ["alarms", "cookies", "http://*.amazon.com/*", "https://*.amazon.com/*", "https://*.cloudfront.net/*", "http://ecs.amazonaws.com/onca/xml"],
+  "permissions": ["alarms", "cookies", "http://*.amazon.com/*", "https://*.amazon.com/*", "https://*.cloudfront.net/*"],
   "background": {
     "scripts": ["kindlesync.js","jquery-1.8.3.min.js","underscore-min.js","sha2.js"],
     "persistent": false
-  }
+  },
+  "content_scripts": [{
+    "matches" : ["https://read.amazon.com/static/app/getFromWebSql.html*"],
+    "run_at" : "document_end",
+    "js": ["getFromWebSql.js"],
+    "all_frames" : true
+  }]
 }
