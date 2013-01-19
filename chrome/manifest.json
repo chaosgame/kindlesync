@@ -5,7 +5,7 @@
 
   "description": "Synchronize your kindle reading progress with Goodreads",
 
-  "permissions": ["alarms", "cookies", "http://*.amazon.com/*", "https://*.amazon.com/*", "https://*.cloudfront.net/*"],
+  "permissions": ["alarms", "cookies", "http://*.amazon.com/*", "https://*.amazon.com/*", "https://*.cloudfront.net/*", "http://127.0.0.1:5000/*"],
   "background": {
     "scripts": ["kindlesync.js","jquery-1.8.3.min.js","underscore-min.js","sha2.js"],
     "persistent": false

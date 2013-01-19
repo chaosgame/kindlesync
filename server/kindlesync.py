@@ -1,5 +1,5 @@
 import oauth2
-from flask import Flask, redirect, url_for, request, session
+from flask import Flask, redirect, url_for, request, session, abort
 from flask.ext.sqlalchemy import SQLAlchemy
 from sqlalchemy.orm.exc import NoResultFound
 from datetime import datetime
@@ -19,7 +19,6 @@ app.config.from_pyfile('auth.cfg')
 # db = SQLAlchemy(app)
 
 def asin_to_grid(asin):
-    # TODO(nathan) memoize this
     amazon = Amazon(
         app.config['AMAZON_KEY'],
         app.config['AMAZON_SECRET'],
@@ -77,9 +76,9 @@ def update_progress(asin, percent):
             'POST', body, OAUTH2_HEADERS)
 
     body = urlencode({
-                'user_status[book_id]' : asin_to_grid(asin),
-                'user_status[percent]' : percent,
-                })
+            'user_status[book_id]' : asin_to_grid(asin),
+            'user_status[percent]' : percent,
+            })
     response, content = client.request(
             'http://www.goodreads.com/user_status.xml',
             'POST', body, OAUTH2_HEADERS)
@@ -88,7 +87,10 @@ def update_progress(asin, percent):
 
 @app.route('/authorized')
 def authorized():
-    return "Ok"
+    if 'access_token' in session:
+        return "Ok"
+    else:
+        return "Not Authorized"
 
 @app.route('/login')
 def login():

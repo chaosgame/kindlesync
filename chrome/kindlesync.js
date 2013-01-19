@@ -1,9 +1,6 @@
 (function(){
     // TODO(nathan) settings page with signins
-    // TODO(nathan) goodreads stuff
-
-    // A javascript port of the python function
-
+    // TODO(nathan) add a button too?
     // TODO(nathan) need code to read from the local db in the client context...
 
     function urlencode(args) {
@@ -15,6 +12,7 @@
     }
 
     function sync_with_server_login() {
+        // TODO(nathan) pop up a window here for this, and have it close when we're done...
         /* $.ajax({
             'url' : '127.0.0.1:5000/'
         }); */
@@ -75,29 +73,14 @@
         });
     }
 
-    function sync_book_with_fragment_map(headers, book, data) {
+    function sync_book_with_metadata(headers, book, data) {
         data = $.parseJSON(data.match(/{.*}/)[0]);
-        var fragments = data['fragmentArray'];
-        // TODO(nathan) sometimes cPos is undefined
-        var last_position = fragments[fragments.length]['cPos'];
 
-        /* var url;
-        if (last_position >= ) {
-            url = '127.0.0.1:5000/update/' + book.asin + '/done/';
-        } else {
-            url = '127.0.0.1:5000/update/' + book.asin + '/progress/' + percent;
+        if ('endPosition' in data) {
+            book.end_position = data['endPosition'];
         }
 
-        $.ajax({
-            'url' : url,
-        }); */
-    }
-
-    function sync_book_with_userdata(headers, book, data) {
-        book.fragments_url = data['fragmentMapUrl'];
-        book.last_page_read = data['lastPageReadData'];
-
-        console.log(book.last_page_read);
+        console.log(data);
 
         $.ajax({
             'url' : book.fragments_url,
@@ -107,7 +90,54 @@
                 sync_book_with_fragment_map(headers, book, data);
             }
         });
+    }
 
+    function sync_book_with_fragment_map(headers, book, data) {
+        data = $.parseJSON(data.match(/{.*}/)[0]);
+        var fragments = data['fragmentArray'];
+        book.last_position = fragments[fragments.length - 1]['cPos'];
+
+        console.log(book);
+
+        var last_page = ('end_position' in book)
+            ? book.end_position
+            : book.last_position;
+
+        var last_page_read = book.last_page_read.position;
+
+        var percent = 100.0 * last_page_read / last_page;
+
+        if (percent < 0) {
+            percent = 0;
+        } else if (percent >= 100) {
+            percent = 100;
+        }
+
+        var url;
+        if (percent == 100) {
+            url = 'http://127.0.0.1:5000/update/' + book.asin + '/done';
+        } else {
+            url = 'http://127.0.0.1:5000/update/' + book.asin + '/progress/' + percent;
+        }
+
+        $.ajax({
+            'url' : url,
+        });
+    }
+
+    function sync_book_with_userdata(headers, book, data) {
+        book.fragments_url = data['fragmentMapUrl'];
+        book.metadata_url = data['metadataUrl'];
+        book.last_page_read = data['lastPageReadData'];
+
+        $.ajax({
+            'url' : book.metadata_url,
+            'headers' : headers,
+            'dataType' : 'text',
+            'success' : function(data) {
+                sync_book_with_metadata(headers, book, data);
+            }
+        });
     }
 
     function sync_book(headers, book) {
