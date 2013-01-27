@@ -1,7 +1,6 @@
 (function(){
     // TODO(nathan) settings page with signins
     // TODO(nathan) add a button too?
-    // TODO(nathan) need code to read from the local db in the client context...
 
     function urlencode(args) {
         return (_.map(
@@ -9,13 +8,6 @@
             function(val, key) {
                 return encodeURIComponent(key) + '=' + encodeURIComponent(val);
             })).join('&');
-    }
-
-    function sync_with_server_login() {
-        // TODO(nathan) pop up a window here for this, and have it close when we're done...
-        /* $.ajax({
-            'url' : '127.0.0.1:5000/'
-        }); */
     }
 
     function sync_with_sessionid(sessionid) {
@@ -80,8 +72,6 @@
             book.end_position = data['endPosition'];
         }
 
-        console.log(data);
-
         $.ajax({
             'url' : book.fragments_url,
             'headers' : headers,
@@ -97,13 +87,16 @@
         var fragments = data['fragmentArray'];
         book.last_position = fragments[fragments.length - 1]['cPos'];
 
-        console.log(book);
+        sync_book_with_data(headers, book);
+    }
 
-        var last_page = ('end_position' in book)
-            ? book.end_position
-            : book.last_position;
-
+    function sync_book_with_data(headers, book) {
         var last_page_read = book.last_page_read.position;
+
+        var last_page = book.last_position;
+        if ('end_position' in book) {
+            last_page = Math.min(book.end_position, last_page);
+        }
 
         var percent = 100.0 * last_page_read / last_page;
 
@@ -120,12 +113,24 @@
             url = 'http://127.0.0.1:5000/update/' + book.asin + '/progress/' + percent;
         }
 
+        book.last_page_read = null;
+        localStorage.setItem(book.asin, JSON.stringify(book));
+
+        // TODO(nathan) do something about the results here?
         $.ajax({
             'url' : url,
         });
     }
 
     function sync_book_with_userdata(headers, book, data) {
+        var cached_book = localStorage.getItem(book.asin);
+        if (cached_book != null) {
+            cached_book = JSON.parse(cached_book);
+            cached_book.last_page_read = data['lastPageReadData'];
+            console.log(cached_book.last_page_read);
+            return sync_book_with_data(headers, cached_book);
+        }
+
         book.fragments_url = data['fragmentMapUrl'];
         book.metadata_url = data['metadataUrl'];
         book.last_page_read = data['lastPageReadData'];
