@@ -1,4 +1,6 @@
 import oauth2
+import os
+
 from flask import Flask, redirect, url_for, request, session, abort
 from flask.ext.sqlalchemy import SQLAlchemy
 from sqlalchemy.orm.exc import NoResultFound
@@ -15,14 +17,13 @@ OAUTH2_HEADERS = {'content-type': 'application/x-www-form-urlencoded'}
 
 app = Flask(__name__)
 app.secret_key = 'kindlesync'
-app.config.from_pyfile('auth.cfg')
 # db = SQLAlchemy(app)
 
 def asin_to_grid(asin):
     amazon = Amazon(
-        app.config['AMAZON_KEY'],
-        app.config['AMAZON_SECRET'],
-        app.config['AMAZON_ASSOCTAG'])
+        os.environ['AMAZON_KEY'],
+        os.environ['AMAZON_SECRET'],
+        os.environ['AMAZON_ASSOCTAG'])
 
     attributes = etree.fromstring(
         amazon.ItemLookup(
@@ -35,7 +36,7 @@ def asin_to_grid(asin):
     resp = requests.get(
         'http://www.goodreads.com/book/isbn_to_id',
         params={
-            'key' : app.config['GOODREADS_KEY'],
+            'key' : os.environ['GOODREADS_KEY'],
             'isbn' : isbn,
             })
 
@@ -45,8 +46,8 @@ def asin_to_grid(asin):
 def update_done(asin):
     client = oauth2.Client(
         oauth2.Consumer(
-            key=app.config['GOODREADS_KEY'],
-            secret=app.config['GOODREADS_SECRET']),
+            key=os.environ['GOODREADS_KEY'],
+            secret=os.environ['GOODREADS_SECRET']),
         session['access_token'])
 
     body = urlencode({
@@ -63,9 +64,11 @@ def update_done(asin):
 def update_progress(asin, percent):
     client = oauth2.Client(
         oauth2.Consumer(
-            key=app.config['GOODREADS_KEY'],
-            secret=app.config['GOODREADS_SECRET']),
+            key=os.environ['GOODREADS_KEY'],
+            secret=os.environ['GOODREADS_SECRET']),
         session['access_token'])
+
+    # don't mark something as in_progress if it's already been read
 
     body = urlencode({
             'name' : 'currently-reading',
@@ -96,8 +99,8 @@ def authorized():
 def login():
     client = oauth2.Client(
         oauth2.Consumer(
-            key=app.config['GOODREADS_KEY'],
-            secret=app.config['GOODREADS_SECRET']))
+            key=os.environ['GOODREADS_KEY'],
+            secret=os.environ['GOODREADS_SECRET']))
 
     response, content = \
         client.request('http://www.goodreads.com/oauth/request_token', 'GET')
