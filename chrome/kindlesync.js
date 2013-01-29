@@ -1,6 +1,7 @@
 (function(){
     // TODO(nathan) settings page with signins
     // TODO(nathan) add a button too?
+    // TODO(nathan) track changes and only update on change
 
     function urlencode(args) {
         return (_.map(
@@ -15,7 +16,6 @@
             return;
         }
 
-        // X-Requested-With:XMLHttpRequest
         var headers = {
             'x-amzn-sessionid' : sessionid.value,
             'X-Requested-With' : 'XMLHttpRequest',
@@ -92,57 +92,50 @@
 
     function sync_book_with_data(headers, book) {
         var last_page_read = book.last_page_read.position;
+        var sync_time = book.last_page_read.syncTime;
 
         var last_page = book.last_position;
         if ('end_position' in book) {
             last_page = Math.min(book.end_position, last_page);
         }
 
-        var percent = 100.0 * last_page_read / last_page;
-
-        if (percent < 0) {
-            percent = 0;
-        } else if (percent >= 100) {
-            percent = 100;
-        }
-
-        var url;
-        if (percent == 100) {
-            url = 'http://127.0.0.1:5000/update/' + book.asin + '/done';
-        } else {
-            url = 'http://127.0.0.1:5000/update/' + book.asin + '/progress/' + percent;
-        }
-
-        book.last_page_read = null;
         localStorage.setItem(book.asin, JSON.stringify(book));
-
-        // TODO(nathan) do something about the results here?
-        $.ajax({
-            'url' : url,
-        });
+        localStorage.setItem(book.asin + "." + sync_time, last_page_read);
     }
 
     function sync_book_with_userdata(headers, book, data) {
+        var last_page_read = data['lastPageReadData'];
+
+        if (last_page_read.position <= 0) {
+            return;
+        }
+
         var cached_book = localStorage.getItem(book.asin);
         if (cached_book != null) {
             cached_book = JSON.parse(cached_book);
-            cached_book.last_page_read = data['lastPageReadData'];
-            console.log(cached_book.last_page_read);
-            return sync_book_with_data(headers, cached_book);
-        }
 
-        book.fragments_url = data['fragmentMapUrl'];
-        book.metadata_url = data['metadataUrl'];
-        book.last_page_read = data['lastPageReadData'];
-
-        $.ajax({
-            'url' : book.metadata_url,
-            'headers' : headers,
-            'dataType' : 'text',
-            'success' : function(data) {
-                sync_book_with_metadata(headers, book, data);
+            if (last_page_read.syncTime <=
+                cached_book.last_page_read.syncTime) {
+                return;
             }
-        });
+
+            cached_book.last_page_read = last_page_read;
+            sync_book_with_data(headers, cached_book);
+
+        } else {
+            book.fragments_url = data['fragmentMapUrl'];
+            book.metadata_url = data['metadataUrl'];
+            book.last_page_read = last_page_read;
+
+            $.ajax({
+                'url' : book.metadata_url,
+                'headers' : headers,
+                'dataType' : 'text',
+                'success' : function(data) {
+                    sync_book_with_metadata(headers, book, data);
+                }
+            });
+        }
     }
 
     function sync_book(headers, book) {
@@ -182,24 +175,49 @@
     }
 
     function get_from_websql_callback(request, sender, sendResponse) {
-        if (sender.tab.url ==
-                chrome.extension.getURL("_generated_background_page.html")) {
-            $iframe = $('#' + request.id);
-            callback = $iframe.data('callback');
-            $iframe.unload();
-            callback(request.value);
-        }
-        sendResponse({});
+        $iframe = $('#' + request.id);
+        callback = $iframe.data('callback');
+        $iframe.unload();
+        callback(request.value);
     }
 
-    chrome.extension.onMessage.addListener(get_from_websql_callback);
+    function options_callback(request, sender, sendResponse) {
+        if (request == "authenticated") {
+            chrome.cookies.get({
+                'url' : 'http://amazon.com',
+                'name' : 'session-id'
+            }, function (sessionid) {
+                sendResponse(sessionid != null);
+            });
+        } else if (request == "last_synced") {
+            sendResponse(0);
+        } else {
+            sendResponse({});
+        }
+    }
+
+    function on_message_callback(request, sender, sendResponse) {
+        if (sender.tab.url ==
+                chrome.extension.getURL("_generated_background_page.html")) {
+            get_from_websql_callback(request, sender, sendResponse);
+        } else if (sender.tab.url ==
+                chrome.extension.getURL("options.html")) {
+            options_callback(request, sender, sendResponse);
+        } else {
+            sendResponse({});
+        }
+        return true;
+    }
+
+    chrome.extension.onMessage.addListener(on_message_callback);
 
     chrome.alarms.onAlarm.addListener(sync);
     chrome.alarms.create('sync', {
-        'periodInMinutes' : 60,
+        'periodInMinutes' : 15,
         'when' : Date.now()
     });
 
+    // Have code run when installed...
     console.log('Loaded.');
 })();
 

@@ -7,9 +7,10 @@
 
   "permissions": ["alarms", "cookies", "http://*.amazon.com/*", "https://*.amazon.com/*", "https://*.cloudfront.net/*", "http://127.0.0.1:5000/*"],
   "background": {
-    "scripts": ["kindlesync.js","jquery-1.8.3.min.js","underscore-min.js","sha2.js"],
+    "scripts": ["kindlesync.js","jquery-1.8.3.min.js","underscore-min.js"],
     "persistent": false
   },
+  "options_page" : "options.html",
   "content_scripts": [{
     "matches" : ["https://read.amazon.com/static/app/getFromWebSql.html*"],
     "run_at" : "document_end",
