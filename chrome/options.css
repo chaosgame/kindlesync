@@ -1,0 +1,64 @@
+#page {
+    width: 720px;
+    min-height: 100%;
+    background: #eeeeee;
+    margin-left: auto;
+    margin-right: auto;
+    display: block;
+    border-left: 1px solid;
+    border-right: 1px solid;
+}
+
+.status {
+    padding: 10px;
+    vertical-align: middle;
+    font-family: Sans-Serif;
+    text-align: center;
+}
+
+#unauthenticated {
+    display: none;
+    background: #ff8888;
+    border-bottom: 1px solid #aa0000;
+}
+
+.status > a {
+    color: #aa0000;
+}
+
+.status > a:hover {
+    color: #ee0000;
+}
+
+.status > img {
+    position: relative;
+    margin-right: 2px;
+    top: 4px;
+}
+
+.book {
+    font-family: Sans-Serif;
+    padding: 10px;
+}
+
+.book > .title {
+    font-weight: bold;
+    padding: 0 0 10px 0;
+}
+
+.book > .author {
+    width: 200px;
+    float: left;
+}
+
+.book > .progress {
+    width: 100px;
+    float: left;
+}
+
+.book:nth-of-type(even) {
+    background: #dddddd;
+}
+
+.book > .synctime {
+}

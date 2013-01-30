@@ -1,6 +1,7 @@
 .*
 *.pyc
 *.db
+*.png
 auth.cfg
 bin
 lib

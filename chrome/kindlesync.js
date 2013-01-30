@@ -69,7 +69,7 @@
         data = $.parseJSON(data.match(/{.*}/)[0]);
 
         if ('endPosition' in data) {
-            book.end_position = data['endPosition'];
+            book.last_page = data['endPosition'];
         }
 
         $.ajax({
@@ -85,28 +85,25 @@
     function sync_book_with_fragment_map(headers, book, data) {
         data = $.parseJSON(data.match(/{.*}/)[0]);
         var fragments = data['fragmentArray'];
-        book.last_position = fragments[fragments.length - 1]['cPos'];
+        var other_last_page = fragments[fragments.length - 1]['cPos'];
+
+        if (book.last_page == null || other_last_page < book.last_page) {
+            book.last_page = other_last_page;
+        }
 
         sync_book_with_data(headers, book);
     }
 
     function sync_book_with_data(headers, book) {
-        var last_page_read = book.last_page_read.position;
-        var sync_time = book.last_page_read.syncTime;
-
-        var last_page = book.last_position;
-        if ('end_position' in book) {
-            last_page = Math.min(book.end_position, last_page);
-        }
-
         localStorage.setItem(book.asin, JSON.stringify(book));
-        localStorage.setItem(book.asin + "." + sync_time, last_page_read);
+        localStorage.setItem(book.asin + "." + book.sync_time, book.last_page_read);
     }
 
     function sync_book_with_userdata(headers, book, data) {
-        var last_page_read = data['lastPageReadData'];
+        var last_page_read = data['lastPageReadData'].position;
+        var sync_time = data['lastPageReadData'].syncTime;
 
-        if (last_page_read.position <= 0) {
+        if (last_page_read <= 0) {
             return;
         }
 
@@ -114,18 +111,19 @@
         if (cached_book != null) {
             cached_book = JSON.parse(cached_book);
 
-            if (last_page_read.syncTime <=
-                cached_book.last_page_read.syncTime) {
+            if (sync_time <= cached_book.sync_time) {
                 return;
             }
 
             cached_book.last_page_read = last_page_read;
+            cached_book.sync_time = sync_time;
             sync_book_with_data(headers, cached_book);
 
         } else {
             book.fragments_url = data['fragmentMapUrl'];
             book.metadata_url = data['metadataUrl'];
             book.last_page_read = last_page_read;
+            book.sync_time = sync_time;
 
             $.ajax({
                 'url' : book.metadata_url,
