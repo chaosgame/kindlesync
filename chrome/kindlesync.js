@@ -147,6 +147,11 @@
             'dataType' : 'xml',
             'success' : function(data) {
                 sync_book_with_associate_data(headers, book, data);
+            },
+            'error' : function(rq, code, error) {
+                if (rq['status'] == 403) {
+                    localStorage['aws_broken'] = true;
+                }
             }
         });
     }
@@ -225,8 +230,9 @@
 
         if (!localStorage['aws_key'] ||
             !localStorage['aws_secret'] ||
-            !localStorage['aws_tag']) {
-            console.log('Please update amazon api token');
+            !localStorage['aws_tag'] ||
+             localStorage['aws_brokwn'] == 'true') {
+            console.log('Invalid Amazon API token');
             return;
         }
 

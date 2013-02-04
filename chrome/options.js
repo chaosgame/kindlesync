@@ -2,7 +2,6 @@ function authenticated_callback(authenticated) {
     if (!authenticated) {
         $("#unauthenticated").show();
     } else {
-        $("#noapikey").show();
         var i, len = localStorage.length;
         for (i = 0; i < len; ++i) {
             var asin = localStorage.key(i)
@@ -93,7 +92,18 @@ $(function() {
                 localStorage['aws_' + field] = $('#' + field).attr('value');
             }
         });
+        localStorage['aws_broken'] = false;
     });
+
+
+    if (!localStorage['aws_key'] ||
+        !localStorage['aws_secret'] ||
+        !localStorage['aws_tag'] ||
+         localStorage['aws_broken'] == 'true') {
+         $("#noapikey").show();
+
+         // TODO(nathan) make this go green after we update
+    }
 
     _.each(['key', 'secret', 'tag'], function(field) {
         if (localStorage['aws_' + field]) {
