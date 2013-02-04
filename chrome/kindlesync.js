@@ -1,7 +1,5 @@
 (function(){
-    // TODO(nathan) settings page with signins
-    // TODO(nathan) add a button too?
-    // TODO(nathan) track changes and only update on change
+    var VERSION = 2;
 
     function urlencode(args) {
         return (_.map(
@@ -9,6 +7,55 @@
             function(val, key) {
                 return encodeURIComponent(key) + '=' + encodeURIComponent(val);
             })).join('&');
+    }
+
+    Date.prototype.toISODate = function() {
+        function add_zero(n) {
+            return ( n < 0 || n > 9 ? "" : "0" ) + n;
+        }
+
+        return this.getFullYear() + '-' + add_zero(this.getMonth() + 1) + '-'
+            + add_zero(this.getDate()) + 'T' + add_zero(this.getHours()) + ':'
+            + add_zero(this.getMinutes()) + ':' + add_zero(this.getSeconds()) + '.000Z';
+    }
+
+    function azurlencode(args) {
+        args['AssociateTag'] = localStorage['aws_tag'];
+        args['AWSAccessKeyId'] = localStorage['aws_key'];
+        args['Timestamp'] = (new Date()).toISOString();
+        args['Service'] = 'AWSECommerceService';
+
+        var message_args = _.map(args,
+            function(val, key) {
+                return encodeURIComponent(key) + '=' + encodeURIComponent(val);
+            });
+        message_args.sort();
+        message_args = message_args.join('&');
+
+        var message = "GET\necs.amazonaws.com\n/onca/xml\n" + message_args;
+
+        var messageBytes = str2binb(message);
+        var secretBytes = str2binb(localStorage['aws_secret']);
+
+        if (secretBytes.length > 16) {
+            secretBytes = core_sha256(secretBytes, localStorage['aws_secret'].length * chrsz);
+        }
+
+        var ipad = Array(16), opad = Array(16);
+        for (var i = 0; i < 16; i++) {
+            ipad[i] = secretBytes[i] ^ 0x36363636;
+            opad[i] = secretBytes[i] ^ 0x5C5C5C5C;
+        }
+
+        var imsg = ipad.concat(messageBytes);
+        var ihash = core_sha256(imsg, 512 + message.length * chrsz);
+        var omsg = opad.concat(ihash);
+        var ohash = core_sha256(omsg, 512 + 256);
+
+        var b64hash = binb2b64(ohash);
+        args['Signature'] = b64hash;
+
+        return "http://ecs.amazonaws.com/onca/xml?" + urlencode(args);
     }
 
     function sync_with_sessionid(sessionid) {
@@ -69,7 +116,7 @@
         data = $.parseJSON(data.match(/{.*}/)[0]);
 
         if ('endPosition' in data) {
-            book.last_page = data['endPosition'];
+            book.last_pos = data['endPosition'];
         }
 
         $.ajax({
@@ -85,45 +132,66 @@
     function sync_book_with_fragment_map(headers, book, data) {
         data = $.parseJSON(data.match(/{.*}/)[0]);
         var fragments = data['fragmentArray'];
-        var other_last_page = fragments[fragments.length - 1]['cPos'];
+        var other_last_pos = fragments[fragments.length - 1]['cPos'];
 
-        if (book.last_page == null || other_last_page < book.last_page) {
-            book.last_page = other_last_page;
+        if (book.last_pos == null || other_last_pos < book.last_pos) {
+            book.last_pos = other_last_pos;
         }
 
+        $.ajax({
+            'url' : azurlencode({
+                'Operation' : 'ItemLookup',
+                'ResponseGroup' : 'ItemAttributes',
+                'ItemId' : book.asin
+            }),
+            'dataType' : 'xml',
+            'success' : function(data) {
+                sync_book_with_associate_data(headers, book, data);
+            }
+        });
+    }
+
+    function sync_book_with_associate_data(headers, book, data) {
+        book.num_pages = $(data).find('NumberOfPages').text();
         sync_book_with_data(headers, book);
     }
 
     function sync_book_with_data(headers, book) {
         localStorage.setItem(book.asin, JSON.stringify(book));
-        localStorage.setItem(book.asin + "." + book.sync_time, book.last_page_read);
+        localStorage.setItem(book.asin + "." + book.sync_time, book.last_pos_read);
     }
 
     function sync_book_with_userdata(headers, book, data) {
-        var last_page_read = data['lastPageReadData'].position;
+        var last_pos_read = data['lastPageReadData'].position;
         var sync_time = data['lastPageReadData'].syncTime;
 
-        if (last_page_read <= 0) {
+        if (last_pos_read <= 0) {
             return;
         }
 
         var cached_book = localStorage.getItem(book.asin);
         if (cached_book != null) {
             cached_book = JSON.parse(cached_book);
+        }
+
+        if (cached_book != null &&
+            cached_book.version != null &&
+            cached_book.version == VERSION) {
 
             if (sync_time <= cached_book.sync_time) {
                 return;
             }
 
-            cached_book.last_page_read = last_page_read;
+            cached_book.last_pos_read = last_pos_read;
             cached_book.sync_time = sync_time;
             sync_book_with_data(headers, cached_book);
 
         } else {
             book.fragments_url = data['fragmentMapUrl'];
             book.metadata_url = data['metadataUrl'];
-            book.last_page_read = last_page_read;
+            book.last_pos_read = last_pos_read;
             book.sync_time = sync_time;
+            book.version = VERSION;
 
             $.ajax({
                 'url' : book.metadata_url,
@@ -154,6 +222,13 @@
 
     function sync() {
         console.log('Syncing.');
+
+        if (!localStorage['aws_key'] ||
+            !localStorage['aws_secret'] ||
+            !localStorage['aws_tag']) {
+            console.log('Please update amazon api token');
+            return;
+        }
 
         chrome.cookies.get({
             'url' : 'http://amazon.com',

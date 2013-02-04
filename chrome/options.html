@@ -8,16 +8,32 @@
   </head>
   <body style="background: #aaaaaa; margin: 0px; padding: 0px;">
     <div id="page">
-        <div class="status" id="unauthenticated">
+        <div class="error" id="unauthenticated">
           <img src="cc/black/png/attention_icon%2624.png" /> Please log into the <a href="http://read.amazon.com">kindle cloudreader</a> and try again.
         </div>
 
-        <div class="status" id="authenticated">
+        <div class="error" id="noapikey">
+          <img src="cc/black/png/attention_icon%2624.png" /> Please create an <a href="http://aws.amazon.com/associates/">Amazon advertising API account</a> and try again.
+
+          <br/>
+
+          <input id="key" type="text" value="(key)"/>
+          <input id="secret" type="text" value="(secret)"/>
+          <input id="tag" type="text" value="(tag)"/>
+          <input id="apiupdate" type="button" value="Update" />
+        </div>
+
+        <div class="status" id="syncnow">
           <img src="cc/black/png/reload_icon%2624.png" /> Sync now.
         </div>
 
-
         <div id="books">
+          <div class="header">
+            <div id="author" class="author">Author</div>
+            <div id="progress" class="progress">Progress</div>
+            <div id="currentpage" class="currentpage">Current Page</div>
+            <div id="synctime" class="synctime">Last Read</div>
+          </div>
         </div>
 
         <!-- show progress, sync now button, border -->

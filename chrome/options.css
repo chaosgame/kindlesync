@@ -16,7 +16,11 @@
     text-align: center;
 }
 
-#unauthenticated {
+.error {
+    padding: 10px;
+    vertical-align: middle;
+    font-family: Sans-Serif;
+    text-align: center;
     display: none;
     background: #ff8888;
     border-bottom: 1px solid #aa0000;
@@ -41,24 +45,42 @@
     padding: 10px;
 }
 
-.book > .title {
+.header {
+    font-family: Sans-Serif;
+    padding: 10px;
+}
+
+.header > div {
+    text-decoration: underline;
+}
+
+.title {
     font-weight: bold;
     padding: 0 0 10px 0;
 }
 
-.book > .author {
+.author {
     width: 200px;
     float: left;
 }
 
-.book > .progress {
+.currentpage {
+    width: 150px;
+    float: left;
+}
+
+.progress {
     width: 100px;
     float: left;
+}
+
+.synctime {
 }
 
 .book:nth-of-type(even) {
     background: #dddddd;
 }
 
-.book > .synctime {
+.clear {
+    clear: both;
 }
