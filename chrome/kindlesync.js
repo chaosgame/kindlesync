@@ -276,8 +276,7 @@
     }
 
     function on_message_callback(request, sender, sendResponse) {
-        if (sender.tab.url ==
-                chrome.extension.getURL("_generated_background_page.html")) {
+        if (request.source == 'getFromWebSql') {
             get_from_websql_callback(request, sender, sendResponse);
         } else if (sender.tab.url ==
                 chrome.extension.getURL("options.html")) {
@@ -288,7 +287,7 @@
         return true;
     }
 
-    chrome.extension.onMessage.addListener(on_message_callback);
+    chrome.runtime.onMessage.addListener(on_message_callback);
 
     chrome.alarms.onAlarm.addListener(sync);
     chrome.alarms.create('sync', {

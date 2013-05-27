@@ -42,7 +42,7 @@ function authenticated_callback(authenticated) {
     }
 }
 
-chrome.extension.sendMessage("authenticated", authenticated_callback);
+chrome.runtime.sendMessage("authenticated", authenticated_callback);
 
 function sort(field) {
     _.each($('.book').sort(function(a, b) {

@@ -6,6 +6,7 @@
             [],
             function (tx, results) {
                 var message = {
+                    'source' : 'getFromWebSql',
                     'key' : key,
                     'id' : id,
                     'value' : null
@@ -13,7 +14,7 @@
                 if (results.rows.length == 1) {
                     message['value'] = results.rows.item(0).value;
                 }
-                chrome.extension.sendMessage(
+                chrome.runtime.sendMessage(
                     message,
                     function(r) { }
                 );
